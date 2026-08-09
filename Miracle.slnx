@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Miracle/Miracle.vcxproj" Id="0b9a69b9-e4c2-461b-81b4-80db664620cf" />
+</Solution>
