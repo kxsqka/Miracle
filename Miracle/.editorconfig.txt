@@ -1,5 +1,0 @@
-Ini, TOML
-root = true
-
-[*]
-charset = utf-8
