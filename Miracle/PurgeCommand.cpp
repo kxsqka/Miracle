@@ -1,8 +1,6 @@
 #include "PurgeCommand.h"
 #include <algorithm>
 
-const dpp::snowflake ALLOWED_ROLE_ID = 1501989416455897296ULL;
-
 bool is_offtopic(const std::string& content) {
     std::vector<std::string> prefixes = { "//", "((", "))", "Вне:", "\\" };
     for (const auto& p : prefixes) {
@@ -21,39 +19,14 @@ void RegisterPurgeCommand(dpp::cluster& bot) {
     bot.global_command_create(purge_cmd);
 }
 
-void HandlePurgeCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake log_channel_id, const std::vector<dpp::snowflake>& blacklist) {
-    dpp::snowflake user_id = event.command.usr.id;
-
-    if (std::find(blacklist.begin(), blacklist.end(), user_id) != blacklist.end()) {
-        event.reply(dpp::message("У вас недостаточно бурмалды для пользования Всевышним, сосите!").set_flags(dpp::m_ephemeral));
-        return;
-    }
-
-    bool has_permission = false;
-
-    if (event.command.app_permissions.has(dpp::p_manage_messages) ||
-        event.command.app_permissions.has(dpp::p_administrator)) {
-        has_permission = true;
-    }
-    else {
-        const auto& roles = event.command.member.get_roles();
-        if (std::find(roles.begin(), roles.end(), ALLOWED_ROLE_ID) != roles.end()) {
-            has_permission = true;
-        }
-    }
-
-    if (!has_permission) {
-        event.reply(dpp::message("У вас недостаточно бурмалды для пользования Всевышним, сосите!").set_flags(dpp::m_ephemeral));
-        return;
-    }
-
+void HandlePurgeCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake log_channel_id) {
     int64_t amount = std::get<int64_t>(event.get_parameter("amount"));
     if (amount > 100) amount = 100;
     if (amount < 1) amount = 1;
 
     event.thinking(true);
 
-    bot.messages_get(event.command.channel_id, 0, 0, 0, amount, [&bot, event, log_channel_id, blacklist](const dpp::confirmation_callback_t& callback) {
+    bot.messages_get(event.command.channel_id, 0, 0, 0, amount, [&bot, event, log_channel_id](const dpp::confirmation_callback_t& callback) {
         if (callback.is_error()) {
             event.edit_original_response(dpp::message("Ошибка при получении истории сообщений."));
             return;

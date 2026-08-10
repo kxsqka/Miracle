@@ -141,12 +141,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AcceptCommand.cpp" />
+    <ClCompile Include="HelpCommand.cpp" />
     <ClCompile Include="Miracle.cpp" />
     <ClCompile Include="PurgeCommand.cpp" />
+    <ClCompile Include="ShipCommand.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AcceptCommand.h" />
+    <ClInclude Include="HelpCommand.h" />
+    <ClInclude Include="Permissions.h" />
     <ClInclude Include="PurgeCommand.h" />
+    <ClInclude Include="ShipCommand.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include=".gitignore" />

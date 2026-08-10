@@ -3,8 +3,8 @@
 #include <functional>
 #include <iomanip>
 #include <sstream>
+#include <fstream>
 
-const dpp::snowflake ACCEPT_ROLE_ID = 1501989416455897295ULL;
 const dpp::snowflake ACCEPTED_ROLE_ID = 1501989416321810575ULL;
 
 const std::vector<std::string> TEMPLATE_KEYWORDS = {
@@ -18,6 +18,24 @@ const std::vector<std::string> TEMPLATE_KEYWORDS = {
     "Инвентарь"
 };
 
+static int GetNextAppNumber() {
+    int current_num = 1;
+
+    std::ifstream in("app_counter.txt");
+    if (in.is_open()) {
+        in >> current_num;
+        in.close();
+    }
+
+    std::ofstream out("app_counter.txt");
+    if (out.is_open()) {
+        out << (current_num + 1);
+        out.close();
+    }
+
+    return current_num;
+}
+
 void RegisterAcceptCommand(dpp::cluster& bot) {
     dpp::slashcommand accept_cmd("accept", "Принять анкету (Только Рустодия)", bot.me.id);
 
@@ -28,30 +46,7 @@ void RegisterAcceptCommand(dpp::cluster& bot) {
     bot.global_command_create(accept_cmd);
 }
 
-void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake archive_channel_id, const std::vector<dpp::snowflake>& blacklist) {
-    dpp::snowflake admin_id = event.command.usr.id;
-
-    if (std::find(blacklist.begin(), blacklist.end(), admin_id) != blacklist.end()) {
-        event.reply(dpp::message("У вас недостаточно бурмалды для пользования Всевышним, сосите!").set_flags(dpp::m_ephemeral));
-        return;
-    }
-
-    bool has_permission = false;
-    if (event.command.app_permissions.has(dpp::p_administrator)) {
-        has_permission = true;
-    }
-    else {
-        const auto& roles = event.command.member.get_roles();
-        if (std::find(roles.begin(), roles.end(), ACCEPT_ROLE_ID) != roles.end()) {
-            has_permission = true;
-        }
-    }
-
-    if (!has_permission) {
-        event.reply(dpp::message("У вас недостаточно бурмалды для пользования Всевышним, сосите!").set_flags(dpp::m_ephemeral));
-        return;
-    }
-
+void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dpp::snowflake archive_channel_id) {
     dpp::snowflake target_user_id = std::get<dpp::snowflake>(event.get_parameter("user"));
 
     event.thinking(true);
@@ -75,10 +70,6 @@ void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
             return a.id.get_creation_time() < b.id.get_creation_time();
             });
 
-        if (user_messages.size() > 5) {
-            user_messages.erase(user_messages.begin(), user_messages.end() - 5);
-        }
-
         if (user_messages.empty()) {
             event.edit_original_response(dpp::message("Не удалось найти сообщения этого пользователя в данном канале."));
             return;
@@ -86,9 +77,14 @@ void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
 
         std::string full_application_text = "";
         std::string found_image_url = "";
+        bool inventory_reached = false;
 
         for (const auto& msg : user_messages) {
-            full_application_text += msg.content + "\n\n";
+            if (inventory_reached) {
+                break;
+            }
+
+            std::string content = msg.content;
 
             if (found_image_url.empty() && !msg.attachments.empty()) {
                 for (const auto& att : msg.attachments) {
@@ -101,6 +97,20 @@ void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
                         break;
                     }
                 }
+            }
+
+            if (content.find("Инвентарь") != std::string::npos) {
+                inventory_reached = true;
+            }
+
+            full_application_text += content + "\n\n";
+        }
+
+        size_t last_inv_pos = full_application_text.rfind("Инвентарь");
+        if (last_inv_pos != std::string::npos) {
+            size_t ping_pos = full_application_text.find("<@", last_inv_pos);
+            if (ping_pos != std::string::npos) {
+                full_application_text = full_application_text.substr(0, ping_pos);
             }
         }
 
@@ -158,6 +168,8 @@ void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
         time_oss << std::put_time(&local_tm, "%d.%m.%Y, %H:%M");
         std::string formatted_time = time_oss.str();
 
+        int app_number = GetNextAppNumber();
+
         std::vector<dpp::message> archive_messages;
         for (size_t i = 0; i < chunks.size(); ++i) {
             dpp::embed emb = dpp::embed()
@@ -166,10 +178,10 @@ void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
                 .set_description(chunks[i]);
 
             if (i == 0) {
-                emb.set_title("📄 Принятая анкета персонажа");
+                emb.set_title("📄 Анкета #" + std::to_string(app_number));
             }
             else {
-                emb.set_title("📄 Принятая анкета персонажа (продолжение)");
+                emb.set_title("📄 Анкета #" + std::to_string(app_number) + " (продолжение)");
             }
 
             if (i == chunks.size() - 1) {
@@ -186,14 +198,14 @@ void HandleAcceptCommand(dpp::cluster& bot, const dpp::slashcommand_t& event, dp
         }
 
         std::shared_ptr<std::function<void(size_t)>> send_next_ptr = std::make_shared<std::function<void(size_t)>>();
-        *send_next_ptr = [&bot, archive_messages, send_next_ptr, event](size_t index) {
+        *send_next_ptr = [&bot, archive_messages, send_next_ptr, event, app_number](size_t index) {
             if (index < archive_messages.size()) {
                 bot.message_create(archive_messages[index], [index, send_next_ptr](const dpp::confirmation_callback_t& callback) {
                     (*send_next_ptr)(index + 1);
                     });
             }
             else {
-                event.edit_original_response(dpp::message("✅ Готово!"));
+                event.edit_original_response(dpp::message("✅ Анкета #" + std::to_string(app_number) + " успешно принята и отправлена в архив!"));
             }
             };
 
